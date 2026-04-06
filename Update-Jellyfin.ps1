@@ -909,16 +909,24 @@ function Compare-SemanticVersion {
         [string]$Latest
     )
 
-    $Installed = ($Installed -replace '^v', '' -split '\+')[0]
-    $Latest    = ($Latest    -replace '^v', '' -split '\+')[0]
+    # Strip v prefix, pre-release suffix (-beta.1), and build metadata (+abc)
+    $cleanPattern = '^v?(?<ver>\d+\.\d+\.\d+(\.\d+)?)'
+
+    $instMatch   = [regex]::Match($Installed, $cleanPattern)
+    $latestMatch = [regex]::Match($Latest, $cleanPattern)
+
+    if (-not $instMatch.Success -or -not $latestMatch.Success) {
+        Write-UpdateLog "Could not parse version numbers, falling back to string comparison (installed='$Installed', latest='$Latest')" -Level WARN
+        return $Installed -ne $Latest
+    }
 
     try {
-        $instVer   = [version]$Installed
-        $latestVer = [version]$Latest
+        $instVer   = [version]$instMatch.Groups['ver'].Value
+        $latestVer = [version]$latestMatch.Groups['ver'].Value
         return $latestVer -gt $instVer
     }
     catch {
-        Write-UpdateLog "Could not parse versions as [version], falling back to string comparison" -Level WARN
+        Write-UpdateLog "Version cast failed: $_ - falling back to string comparison" -Level WARN
         return $Installed -ne $Latest
     }
 }
