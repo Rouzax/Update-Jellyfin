@@ -506,26 +506,30 @@ function Get-PortableZip {
 
     for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
         try {
-            Start-BitsTransfer -Source $Release.DownloadUrl -Destination $zipPath -ErrorAction Stop
+            Write-UpdateLog "Download attempt $attempt/$maxRetries via Invoke-WebRequest..."
+            $webRequestParams = @{
+                Uri             = $Release.DownloadUrl
+                OutFile         = $zipPath
+                UseBasicParsing = $true
+                TimeoutSec      = 300
+                Headers         = @{ 'User-Agent' = $Script:UserAgent }
+                ErrorAction     = 'Stop'
+            }
+            Invoke-WebRequest @webRequestParams
             $downloaded = $true
             break
         }
         catch {
-            Write-UpdateLog "BITS download attempt $attempt/$maxRetries failed: $_" -Level WARN
+            Write-UpdateLog "Invoke-WebRequest attempt $attempt/$maxRetries failed: $_" -Level WARN
 
             if ($attempt -eq $maxRetries) {
-                Write-UpdateLog 'Falling back to WebClient download...' -Level WARN
+                Write-UpdateLog 'Falling back to BITS transfer...' -Level WARN
                 try {
-                    $wc = New-Object System.Net.WebClient
-                    $wc.Headers.Add('User-Agent', $Script:UserAgent)
-                    $wc.DownloadFile($Release.DownloadUrl, $zipPath)
+                    Start-BitsTransfer -Source $Release.DownloadUrl -Destination $zipPath -ErrorAction Stop
                     $downloaded = $true
                 }
                 catch {
-                    Write-UpdateLog "WebClient download also failed: $_" -Level ERROR
-                }
-                finally {
-                    if ($wc) { $wc.Dispose() }
+                    Write-UpdateLog "BITS transfer also failed: $_" -Level ERROR
                 }
             }
             else {
