@@ -82,6 +82,12 @@
       Arguments: -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "C:\Scripts\Update-Jellyfin.ps1"
 #>
 
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
+    Justification = 'Parameters are used by nested functions via parent scope')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
+    Justification = 'Script is designed for unattended non-interactive execution')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', 'Test-PreFlightChecks',
+    Justification = 'Name reflects that multiple checks are performed')]
 [CmdletBinding()]
 param(
     [ValidateNotNullOrEmpty()]
