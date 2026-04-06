@@ -291,7 +291,7 @@ function Enter-UpdateLock {
         }
     }
 
-    # Atomic lock acquisition — CreateNew fails if file was created between check and here
+    # Atomic lock acquisition -- CreateNew fails if file was created between check and here
     try {
         $stream = [System.IO.File]::Open($Script:LockFile, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
         try {
