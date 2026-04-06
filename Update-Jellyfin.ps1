@@ -871,10 +871,16 @@ function Test-JellyfinHealth {
         try {
             $response = Invoke-WebRequest -Uri $HealthCheckUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
             if ($response.StatusCode -eq 200) {
-                Write-UpdateLog "Health check passed (HTTP 200) after $([math]::Round($stopwatch.Elapsed.TotalSeconds))s" -Level SUCCESS
-                return $true
+                $body = $response.Content.Trim()
+                if ($body -eq 'Healthy') {
+                    Write-UpdateLog "Health check passed (HTTP 200, body='Healthy') after $([math]::Round($stopwatch.Elapsed.TotalSeconds))s" -Level SUCCESS
+                    return $true
+                }
+                Write-UpdateLog "Health check HTTP 200 but unexpected body: '$body', retrying..." -Level WARN
             }
-            Write-UpdateLog "Health check returned HTTP $($response.StatusCode), retrying..." -Level WARN
+            else {
+                Write-UpdateLog "Health check returned HTTP $($response.StatusCode), retrying..." -Level WARN
+            }
         }
         catch {
             $elapsed = [math]::Round($stopwatch.Elapsed.TotalSeconds)
