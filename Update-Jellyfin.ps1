@@ -183,7 +183,7 @@ function Write-UpdateLog {
     switch ($Level) {
         'ERROR'   { Write-Error   $Message -ErrorAction Continue }
         'WARN'    { Write-Warning $Message }
-        'SUCCESS' { Write-Host    $entry -ForegroundColor Green }
+        'SUCCESS' { Write-Information $entry -InformationAction Continue }
         default   { Write-Verbose $entry }
     }
 }
