@@ -597,7 +597,8 @@ function Stop-JellyfinService {
     Write-UpdateLog 'Attempting forceful process termination...' -Level WARN
 
     try {
-        $serviceWmi = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop
+        $escapedName = $ServiceName.Replace("'", "''")
+            $serviceWmi = Get-CimInstance -ClassName Win32_Service -Filter "Name='$escapedName'" -ErrorAction Stop
         if ($serviceWmi.ProcessId -and $serviceWmi.ProcessId -ne 0) {
             $proc = Get-Process -Id $serviceWmi.ProcessId -ErrorAction SilentlyContinue
             if ($proc) {
