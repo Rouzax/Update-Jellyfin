@@ -270,11 +270,11 @@ function Enter-UpdateLock {
         New-Item -Path $lockDir -ItemType Directory -Force | Out-Null
     }
 
+    # Handle stale lock before attempting atomic create
     if (Test-Path $Script:LockFile) {
         $lockContent = Get-Content $Script:LockFile -Raw -ErrorAction SilentlyContinue
         $lockAge = (Get-Date) - (Get-Item $Script:LockFile).LastWriteTime
 
-        # Stale lock: if older than 30 minutes, it is orphaned
         if ($lockAge.TotalMinutes -gt 30) {
             Write-Log "Removing stale lock file (age: $($lockAge.TotalMinutes.ToString('F0')) min, PID: $lockContent)" -Level WARN
             Remove-Item $Script:LockFile -Force
@@ -285,9 +285,25 @@ function Enter-UpdateLock {
         }
     }
 
-    Set-Content -Path $Script:LockFile -Value $PID -Encoding UTF8
-    Write-Log "Acquired update lock (PID: $PID)"
-    return $true
+    # Atomic lock acquisition — CreateNew fails if file was created between check and here
+    try {
+        $stream = [System.IO.File]::Open($Script:LockFile, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+        try {
+            $writer = [System.IO.StreamWriter]::new($stream)
+            $writer.Write($PID)
+            $writer.Flush()
+        }
+        finally {
+            if ($writer) { $writer.Dispose() }
+            $stream.Dispose()
+        }
+        Write-Log "Acquired update lock (PID: $PID)"
+        return $true
+    }
+    catch [System.IO.IOException] {
+        Write-Log "Another update acquired the lock before us (race condition avoided)" -Level ERROR
+        return $false
+    }
 }
 
 function Exit-UpdateLock {
