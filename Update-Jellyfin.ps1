@@ -166,7 +166,7 @@ function Initialize-Logging {
         Remove-Item -Force -ErrorAction SilentlyContinue
 }
 
-function Write-Log {
+function Write-UpdateLog {
     param(
         [Parameter(Mandatory)]
         [string]$Message,
@@ -252,11 +252,11 @@ function Send-PushoverNotification {
     try {
         $null = Invoke-RestMethod -Uri 'https://api.pushover.net/1/messages.json' `
             -Method Post -Body $body -TimeoutSec 15 -ErrorAction Stop
-        Write-Log "Pushover notification sent: $Type" -Level INFO
+        Write-UpdateLog "Pushover notification sent: $Type" -Level INFO
     }
     catch {
         # Non-fatal: log but do not fail the update
-        Write-Log "Pushover notification failed: $_" -Level WARN
+        Write-UpdateLog "Pushover notification failed: $_" -Level WARN
     }
 }
 
@@ -276,11 +276,11 @@ function Enter-UpdateLock {
         $lockAge = (Get-Date) - (Get-Item $Script:LockFile).LastWriteTime
 
         if ($lockAge.TotalMinutes -gt 30) {
-            Write-Log "Removing stale lock file (age: $($lockAge.TotalMinutes.ToString('F0')) min, PID: $lockContent)" -Level WARN
+            Write-UpdateLog "Removing stale lock file (age: $($lockAge.TotalMinutes.ToString('F0')) min, PID: $lockContent)" -Level WARN
             Remove-Item $Script:LockFile -Force
         }
         else {
-            Write-Log "Another update is already running (lock age: $($lockAge.TotalMinutes.ToString('F1')) min, PID: $lockContent)" -Level ERROR
+            Write-UpdateLog "Another update is already running (lock age: $($lockAge.TotalMinutes.ToString('F1')) min, PID: $lockContent)" -Level ERROR
             return $false
         }
     }
@@ -297,11 +297,11 @@ function Enter-UpdateLock {
             if ($writer) { $writer.Dispose() }
             $stream.Dispose()
         }
-        Write-Log "Acquired update lock (PID: $PID)"
+        Write-UpdateLog "Acquired update lock (PID: $PID)"
         return $true
     }
     catch [System.IO.IOException] {
-        Write-Log "Another update acquired the lock before us (race condition avoided)" -Level ERROR
+        Write-UpdateLog "Another update acquired the lock before us (race condition avoided)" -Level ERROR
         return $false
     }
 }
@@ -309,7 +309,7 @@ function Enter-UpdateLock {
 function Exit-UpdateLock {
     if (Test-Path $Script:LockFile) {
         Remove-Item $Script:LockFile -Force -ErrorAction SilentlyContinue
-        Write-Log 'Released update lock'
+        Write-UpdateLog 'Released update lock'
     }
 }
 
@@ -318,42 +318,42 @@ function Exit-UpdateLock {
 #region -- Pre-Flight Checks --------------------------------------------------
 
 function Test-PreFlightChecks {
-    Write-Log '-- Pre-flight checks --'
+    Write-UpdateLog '-- Pre-flight checks --'
 
     # 1. Service exists
     $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
     if (-not $service) {
-        Write-Log "Service '$ServiceName' not found. Available Jellyfin-like services: $(
+        Write-UpdateLog "Service '$ServiceName' not found. Available Jellyfin-like services: $(
             (Get-Service | Where-Object Name -like '*jellyfin*').Name -join ', '
         )" -Level ERROR
         return $false
     }
-    Write-Log "Service '$ServiceName' found (Status: $($service.Status))"
+    Write-UpdateLog "Service '$ServiceName' found (Status: $($service.Status))"
 
     # 2. Install path exists
     if (-not (Test-Path $InstallPath)) {
-        Write-Log "Install path not found: $InstallPath" -Level ERROR
+        Write-UpdateLog "Install path not found: $InstallPath" -Level ERROR
         return $false
     }
-    Write-Log "Install path verified: $InstallPath"
+    Write-UpdateLog "Install path verified: $InstallPath"
 
     # 3. Disk space on system drive
     $systemDrive = $env:SystemDrive
     $freeSpaceGB = [math]::Round((Get-PSDrive ($systemDrive.TrimEnd(':'))).Free / 1GB, 2)
     if ($freeSpaceGB -lt $Script:MinDiskSpaceGB) {
-        Write-Log "Insufficient disk space on $systemDrive : ${freeSpaceGB}GB free, need ${Script:MinDiskSpaceGB}GB" -Level ERROR
+        Write-UpdateLog "Insufficient disk space on $systemDrive : ${freeSpaceGB}GB free, need ${Script:MinDiskSpaceGB}GB" -Level ERROR
         return $false
     }
-    Write-Log "Disk space OK: ${freeSpaceGB}GB free on $systemDrive"
+    Write-UpdateLog "Disk space OK: ${freeSpaceGB}GB free on $systemDrive"
 
     # 4. Internet connectivity
     foreach ($hostname in @('api.github.com', 'repo.jellyfin.org')) {
         try {
             $null = [System.Net.Dns]::GetHostAddresses($hostname)
-            Write-Log "DNS resolution for $hostname OK"
+            Write-UpdateLog "DNS resolution for $hostname OK"
         }
         catch {
-            Write-Log "Cannot resolve $hostname -- no internet? Error: $_" -Level ERROR
+            Write-UpdateLog "Cannot resolve $hostname -- no internet? Error: $_" -Level ERROR
             return $false
         }
     }
@@ -374,12 +374,12 @@ function Get-InstalledVersion {
                 $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($path).ProductVersion
                 if ($version) {
                     $clean = ($version -split '\+')[0]
-                    Write-Log "Installed version from ${binary}: $clean"
+                    Write-UpdateLog "Installed version from ${binary}: $clean"
                     return $clean
                 }
             }
             catch {
-                Write-Log "Could not read version from ${binary}: $_" -Level WARN
+                Write-UpdateLog "Could not read version from ${binary}: $_" -Level WARN
             }
         }
     }
@@ -391,21 +391,21 @@ function Get-InstalledVersion {
             $xml = [xml](Get-Content $systemXml -Raw)
             $version = $xml.ServerConfiguration.ServerVersion
             if ($version) {
-                Write-Log "Installed version from system.xml: $version"
+                Write-UpdateLog "Installed version from system.xml: $version"
                 return $version
             }
         }
         catch {
-            Write-Log "Could not parse system.xml: $_" -Level WARN
+            Write-UpdateLog "Could not parse system.xml: $_" -Level WARN
         }
     }
 
-    Write-Log 'Could not determine installed version from any source' -Level WARN
+    Write-UpdateLog 'Could not determine installed version from any source' -Level WARN
     return $null
 }
 
 function Get-LatestRelease {
-    Write-Log 'Querying GitHub releases API (jellyfin/jellyfin)...'
+    Write-UpdateLog 'Querying GitHub releases API (jellyfin/jellyfin)...'
 
     $headers = @{
         'Accept'     = 'application/vnd.github+json'
@@ -422,18 +422,18 @@ function Get-LatestRelease {
         }
         catch {
             $statusCode = $_.Exception.Response.StatusCode.value__
-            Write-Log "GitHub API attempt $attempt/$maxRetries failed (HTTP $statusCode): $_" -Level WARN
+            Write-UpdateLog "GitHub API attempt $attempt/$maxRetries failed (HTTP $statusCode): $_" -Level WARN
 
             if ($attempt -lt $maxRetries) {
                 $backoff = $attempt * 5
-                Write-Log "Retrying in ${backoff}s..."
+                Write-UpdateLog "Retrying in ${backoff}s..."
                 Start-Sleep -Seconds $backoff
             }
         }
     }
 
     if (-not $release) {
-        Write-Log 'Failed to query GitHub releases API after all retries' -Level ERROR
+        Write-UpdateLog 'Failed to query GitHub releases API after all retries' -Level ERROR
         return $null
     }
 
@@ -448,20 +448,20 @@ function Get-LatestRelease {
     $downloadUrl = $null
     foreach ($candidateUrl in @($primaryUrl, $fallbackUrl)) {
         try {
-            Write-Log "Probing: $candidateUrl"
+            Write-UpdateLog "Probing: $candidateUrl"
             $null = Invoke-WebRequest -Uri $candidateUrl -Method Head -UseBasicParsing -TimeoutSec 15 -ErrorAction Stop
             $downloadUrl = $candidateUrl
-            Write-Log 'URL reachable'
+            Write-UpdateLog 'URL reachable'
             break
         }
         catch {
             $httpStatus = $_.Exception.Response.StatusCode.value__
-            Write-Log "Probe failed (HTTP $httpStatus): $candidateUrl" -Level WARN
+            Write-UpdateLog "Probe failed (HTTP $httpStatus): $candidateUrl" -Level WARN
         }
     }
 
     if (-not $downloadUrl) {
-        Write-Log "ZIP not found on repo.jellyfin.org for version $latestVersion" -Level ERROR
+        Write-UpdateLog "ZIP not found on repo.jellyfin.org for version $latestVersion" -Level ERROR
         return $null
     }
 
@@ -473,8 +473,8 @@ function Get-LatestRelease {
         PublishedAt = $release.published_at
     }
 
-    Write-Log "Latest release: v$($result.Version) published $($result.PublishedAt)"
-    Write-Log "Download URL: $($result.DownloadUrl)"
+    Write-UpdateLog "Latest release: v$($result.Version) published $($result.PublishedAt)"
+    Write-UpdateLog "Download URL: $($result.DownloadUrl)"
 
     return $result
 }
@@ -494,7 +494,7 @@ function Get-PortableZip {
 
     $zipPath = Join-Path $tempDir $Release.ZipName
 
-    Write-Log "Downloading $($Release.ZipName) to $tempDir..."
+    Write-UpdateLog "Downloading $($Release.ZipName) to $tempDir..."
 
     $maxRetries = 3
     $downloaded = $false
@@ -506,10 +506,10 @@ function Get-PortableZip {
             break
         }
         catch {
-            Write-Log "BITS download attempt $attempt/$maxRetries failed: $_" -Level WARN
+            Write-UpdateLog "BITS download attempt $attempt/$maxRetries failed: $_" -Level WARN
 
             if ($attempt -eq $maxRetries) {
-                Write-Log 'Falling back to WebClient download...' -Level WARN
+                Write-UpdateLog 'Falling back to WebClient download...' -Level WARN
                 try {
                     $wc = New-Object System.Net.WebClient
                     $wc.Headers.Add('User-Agent', $Script:UserAgent)
@@ -517,7 +517,7 @@ function Get-PortableZip {
                     $downloaded = $true
                 }
                 catch {
-                    Write-Log "WebClient download also failed: $_" -Level ERROR
+                    Write-UpdateLog "WebClient download also failed: $_" -Level ERROR
                 }
                 finally {
                     if ($wc) { $wc.Dispose() }
@@ -530,14 +530,14 @@ function Get-PortableZip {
     }
 
     if (-not $downloaded -or -not (Test-Path $zipPath)) {
-        Write-Log 'All download attempts failed' -Level ERROR
+        Write-UpdateLog 'All download attempts failed' -Level ERROR
         return $null
     }
 
     # Sanity check: real ZIP is ~160MB
     $sizeMB = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
     if ($sizeMB -lt $Script:MinZipSizeMB) {
-        Write-Log "Downloaded file is suspiciously small: ${sizeMB}MB (expected >${Script:MinZipSizeMB}MB). Likely an error page or truncated download." -Level ERROR
+        Write-UpdateLog "Downloaded file is suspiciously small: ${sizeMB}MB (expected >${Script:MinZipSizeMB}MB). Likely an error page or truncated download." -Level ERROR
         Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
         return $null
     }
@@ -549,11 +549,11 @@ function Get-PortableZip {
             $header = New-Object byte[] 4
             $bytesRead = $stream.Read($header, 0, 4)
             if ($bytesRead -lt 4 -or $header[0] -ne 0x50 -or $header[1] -ne 0x4B) {
-                Write-Log 'Downloaded file does not have a valid ZIP header (PK signature missing)' -Level ERROR
+                Write-UpdateLog 'Downloaded file does not have a valid ZIP header (PK signature missing)' -Level ERROR
                 Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
                 return $null
             }
-            Write-Log "ZIP header validated, size: ${sizeMB}MB"
+            Write-UpdateLog "ZIP header validated, size: ${sizeMB}MB"
         }
         finally {
             $stream.Close()
@@ -561,7 +561,7 @@ function Get-PortableZip {
         }
     }
     catch {
-        Write-Log "Could not validate ZIP header: $_" -Level WARN
+        Write-UpdateLog "Could not validate ZIP header: $_" -Level WARN
     }
 
     return [PSCustomObject]@{
@@ -577,43 +577,43 @@ function Get-PortableZip {
 function Stop-JellyfinService {
     $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
     if (-not $service -or $service.Status -eq 'Stopped') {
-        Write-Log 'Service is already stopped'
+        Write-UpdateLog 'Service is already stopped'
         return $true
     }
 
-    Write-Log "Stopping service '$ServiceName' (current status: $($service.Status))..."
+    Write-UpdateLog "Stopping service '$ServiceName' (current status: $($service.Status))..."
 
     try {
         Stop-Service -Name $ServiceName -Force -ErrorAction Stop
         $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds($ServiceStopTimeoutSeconds))
-        Write-Log 'Service stopped gracefully' -Level SUCCESS
+        Write-UpdateLog 'Service stopped gracefully' -Level SUCCESS
         return $true
     }
     catch {
-        Write-Log "Graceful stop failed: $_" -Level WARN
+        Write-UpdateLog "Graceful stop failed: $_" -Level WARN
     }
 
     # Escalate: kill the process
-    Write-Log 'Attempting forceful process termination...' -Level WARN
+    Write-UpdateLog 'Attempting forceful process termination...' -Level WARN
 
     try {
         $serviceWmi = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop
         if ($serviceWmi.ProcessId -and $serviceWmi.ProcessId -ne 0) {
             $proc = Get-Process -Id $serviceWmi.ProcessId -ErrorAction SilentlyContinue
             if ($proc) {
-                Write-Log "Killing process $($proc.Id) ($($proc.ProcessName))"
+                Write-UpdateLog "Killing process $($proc.Id) ($($proc.ProcessName))"
                 $proc | Stop-Process -Force
                 Start-Sleep -Seconds 3
             }
         }
     }
     catch {
-        Write-Log "Could not kill via WMI PID lookup: $_" -Level WARN
+        Write-UpdateLog "Could not kill via WMI PID lookup: $_" -Level WARN
     }
 
     # Kill any lingering jellyfin processes
     Get-Process -Name 'jellyfin*' -ErrorAction SilentlyContinue | ForEach-Object {
-        Write-Log "Killing lingering process: $($_.ProcessName) (PID: $($_.Id))" -Level WARN
+        Write-UpdateLog "Killing lingering process: $($_.ProcessName) (PID: $($_.Id))" -Level WARN
         $_ | Stop-Process -Force -ErrorAction SilentlyContinue
     }
 
@@ -622,16 +622,16 @@ function Stop-JellyfinService {
     # Final check
     $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
     if ($service.Status -eq 'Stopped') {
-        Write-Log 'Service stopped after forced termination' -Level SUCCESS
+        Write-UpdateLog 'Service stopped after forced termination' -Level SUCCESS
         return $true
     }
 
-    Write-Log "CRITICAL: Service is still in state '$($service.Status)' after all stop attempts" -Level ERROR
+    Write-UpdateLog "CRITICAL: Service is still in state '$($service.Status)' after all stop attempts" -Level ERROR
     return $false
 }
 
 function Start-JellyfinService {
-    Write-Log "Starting service '$ServiceName'..."
+    Write-UpdateLog "Starting service '$ServiceName'..."
 
     $maxRetries = 3
     for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
@@ -639,18 +639,18 @@ function Start-JellyfinService {
             Start-Service -Name $ServiceName -ErrorAction Stop
             $svc = Get-Service -Name $ServiceName
             $svc.WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
-            Write-Log 'Service started successfully' -Level SUCCESS
+            Write-UpdateLog 'Service started successfully' -Level SUCCESS
             return $true
         }
         catch {
-            Write-Log "Start attempt $attempt/$maxRetries failed: $_" -Level WARN
+            Write-UpdateLog "Start attempt $attempt/$maxRetries failed: $_" -Level WARN
             if ($attempt -lt $maxRetries) {
                 Start-Sleep -Seconds 5
             }
         }
     }
 
-    Write-Log 'Failed to start service after all attempts' -Level ERROR
+    Write-UpdateLog 'Failed to start service after all attempts' -Level ERROR
     return $false
 }
 
@@ -668,7 +668,7 @@ function New-InstallationBackup {
     $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
     $backupDir = Join-Path $Script:BackupRoot "${versionLabel}_${timestamp}"
 
-    Write-Log "Creating backup of $InstallPath to $backupDir..."
+    Write-UpdateLog "Creating backup of $InstallPath to $backupDir..."
 
     try {
         $robocopyArgs = @(
@@ -687,26 +687,26 @@ function New-InstallationBackup {
         $robocopyExit = $LASTEXITCODE
 
         if ($robocopyExit -ge 8) {
-            Write-Log "Robocopy backup failed with exit code $robocopyExit" -Level ERROR
+            Write-UpdateLog "Robocopy backup failed with exit code $robocopyExit" -Level ERROR
             return $null
         }
 
         $backupSize = (Get-ChildItem $backupDir -Recurse -File | Measure-Object -Property Length -Sum).Sum
-        Write-Log "Backup complete: $backupDir ($([math]::Round($backupSize / 1MB, 1)) MB)" -Level SUCCESS
+        Write-UpdateLog "Backup complete: $backupDir ($([math]::Round($backupSize / 1MB, 1)) MB)" -Level SUCCESS
 
         # Prune old backups
         Get-ChildItem -Path $Script:BackupRoot -Directory |
             Sort-Object CreationTime -Descending |
             Select-Object -Skip $MaxBackups |
             ForEach-Object {
-                Write-Log "Pruning old backup: $($_.Name)"
+                Write-UpdateLog "Pruning old backup: $($_.Name)"
                 Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
             }
 
         return $backupDir
     }
     catch {
-        Write-Log "Backup failed: $_" -Level ERROR
+        Write-UpdateLog "Backup failed: $_" -Level ERROR
         return $null
     }
 }
@@ -717,10 +717,10 @@ function Restore-FromBackup {
         [string]$BackupDir
     )
 
-    Write-Log "ROLLING BACK from backup: $BackupDir" -Level WARN
+    Write-UpdateLog "ROLLING BACK from backup: $BackupDir" -Level WARN
 
     if (-not (Test-Path $BackupDir)) {
-        Write-Log "Backup directory not found: $BackupDir" -Level ERROR
+        Write-UpdateLog "Backup directory not found: $BackupDir" -Level ERROR
         return $false
     }
 
@@ -745,23 +745,23 @@ function Restore-FromBackup {
         $robocopyExit = $LASTEXITCODE
 
         if ($robocopyExit -ge 8) {
-            Write-Log "Robocopy rollback failed with exit code $robocopyExit -- MANUAL INTERVENTION REQUIRED" -Level ERROR
+            Write-UpdateLog "Robocopy rollback failed with exit code $robocopyExit -- MANUAL INTERVENTION REQUIRED" -Level ERROR
             return $false
         }
 
-        Write-Log 'Files restored from backup' -Level SUCCESS
+        Write-UpdateLog 'Files restored from backup' -Level SUCCESS
 
         if (Start-JellyfinService) {
-            Write-Log 'Rollback complete, service is running on previous version' -Level SUCCESS
+            Write-UpdateLog 'Rollback complete, service is running on previous version' -Level SUCCESS
             return $true
         }
         else {
-            Write-Log 'Rollback restored files but service failed to start -- MANUAL INTERVENTION REQUIRED' -Level ERROR
+            Write-UpdateLog 'Rollback restored files but service failed to start -- MANUAL INTERVENTION REQUIRED' -Level ERROR
             return $false
         }
     }
     catch {
-        Write-Log "Rollback failed: $_ -- MANUAL INTERVENTION REQUIRED" -Level ERROR
+        Write-UpdateLog "Rollback failed: $_ -- MANUAL INTERVENTION REQUIRED" -Level ERROR
         return $false
     }
 }
@@ -776,7 +776,7 @@ function Install-JellyfinUpdate {
         [string]$ZipPath
     )
 
-    Write-Log "Extracting $ZipPath to $InstallPath..."
+    Write-UpdateLog "Extracting $ZipPath to $InstallPath..."
 
     try {
         # The ZIP contains a root folder like 'jellyfin_10.11.7' with files inside.
@@ -785,25 +785,25 @@ function Install-JellyfinUpdate {
         $stagingDir = Join-Path (Split-Path $ZipPath -Parent) 'staging'
         New-Item -Path $stagingDir -ItemType Directory -Force | Out-Null
 
-        Write-Log 'Extracting ZIP to staging directory...'
+        Write-UpdateLog 'Extracting ZIP to staging directory...'
         Expand-Archive -Path $ZipPath -DestinationPath $stagingDir -Force
 
         # Determine source: single subfolder (unwrap it) or flat extraction
         $extractedItems = @(Get-ChildItem -Path $stagingDir)
         if ($extractedItems.Count -eq 1 -and $extractedItems[0].PSIsContainer) {
             $sourceDir = $extractedItems[0].FullName
-            Write-Log "ZIP contains root folder: $($extractedItems[0].Name)"
+            Write-UpdateLog "ZIP contains root folder: $($extractedItems[0].Name)"
         }
         else {
             $sourceDir = $stagingDir
-            Write-Log 'ZIP extracts flat (no root folder)'
+            Write-UpdateLog 'ZIP extracts flat (no root folder)'
         }
 
         # Verify the extracted content looks like Jellyfin
         $hasJellyfinBinary = (Test-Path (Join-Path $sourceDir 'jellyfin.dll')) -or
                              (Test-Path (Join-Path $sourceDir 'jellyfin.exe'))
         if (-not $hasJellyfinBinary) {
-            Write-Log 'Extracted content does not contain jellyfin.dll or jellyfin.exe -- ZIP may be corrupt' -Level ERROR
+            Write-UpdateLog 'Extracted content does not contain jellyfin.dll or jellyfin.exe -- ZIP may be corrupt' -Level ERROR
             return $false
         }
 
@@ -825,7 +825,7 @@ function Install-JellyfinUpdate {
         $robocopyExit = $LASTEXITCODE
 
         if ($robocopyExit -ge 8) {
-            Write-Log "Robocopy install failed with exit code $robocopyExit" -Level ERROR
+            Write-UpdateLog "Robocopy install failed with exit code $robocopyExit" -Level ERROR
             return $false
         }
 
@@ -833,15 +833,15 @@ function Install-JellyfinUpdate {
         $hasJellyfinBinary = (Test-Path (Join-Path $InstallPath 'jellyfin.dll')) -or
                              (Test-Path (Join-Path $InstallPath 'jellyfin.exe'))
         if (-not $hasJellyfinBinary) {
-            Write-Log "Post-install verification failed: no Jellyfin binary found in $InstallPath" -Level ERROR
+            Write-UpdateLog "Post-install verification failed: no Jellyfin binary found in $InstallPath" -Level ERROR
             return $false
         }
 
-        Write-Log 'Installation completed successfully' -Level SUCCESS
+        Write-UpdateLog 'Installation completed successfully' -Level SUCCESS
         return $true
     }
     catch {
-        Write-Log "Installation failed: $_" -Level ERROR
+        Write-UpdateLog "Installation failed: $_" -Level ERROR
         return $false
     }
     finally {
@@ -856,7 +856,7 @@ function Install-JellyfinUpdate {
 #region -- Health Check -------------------------------------------------------
 
 function Test-JellyfinHealth {
-    Write-Log "Performing health check against $HealthCheckUrl (timeout: ${HealthCheckTimeoutSeconds}s)..."
+    Write-UpdateLog "Performing health check against $HealthCheckUrl (timeout: ${HealthCheckTimeoutSeconds}s)..."
 
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $pollInterval = 5
@@ -865,21 +865,21 @@ function Test-JellyfinHealth {
         try {
             $response = Invoke-WebRequest -Uri $HealthCheckUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
             if ($response.StatusCode -eq 200) {
-                Write-Log "Health check passed (HTTP 200) after $([math]::Round($stopwatch.Elapsed.TotalSeconds))s" -Level SUCCESS
+                Write-UpdateLog "Health check passed (HTTP 200) after $([math]::Round($stopwatch.Elapsed.TotalSeconds))s" -Level SUCCESS
                 return $true
             }
-            Write-Log "Health check returned HTTP $($response.StatusCode), retrying..." -Level WARN
+            Write-UpdateLog "Health check returned HTTP $($response.StatusCode), retrying..." -Level WARN
         }
         catch {
             $elapsed = [math]::Round($stopwatch.Elapsed.TotalSeconds)
-            Write-Log "Health check not ready (${elapsed}s elapsed): $($_.Exception.Message)" -Level WARN
+            Write-UpdateLog "Health check not ready (${elapsed}s elapsed): $($_.Exception.Message)" -Level WARN
         }
 
         Start-Sleep -Seconds $pollInterval
     }
 
     $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-    Write-Log "Health check FAILED after ${HealthCheckTimeoutSeconds}s. Service status: $($service.Status)" -Level ERROR
+    Write-UpdateLog "Health check FAILED after ${HealthCheckTimeoutSeconds}s. Service status: $($service.Status)" -Level ERROR
     return $false
 }
 
@@ -902,7 +902,7 @@ function Compare-SemanticVersion {
         return $latestVer -gt $instVer
     }
     catch {
-        Write-Log "Could not parse versions as [version], falling back to string comparison" -Level WARN
+        Write-UpdateLog "Could not parse versions as [version], falling back to string comparison" -Level WARN
         return $Installed -ne $Latest
     }
 }
@@ -913,10 +913,10 @@ function Compare-SemanticVersion {
 
 function Invoke-JellyfinUpdate {
     Initialize-Logging
-    Write-Log '================================================================'
-    Write-Log '  Jellyfin Auto-Updater starting (portable ZIP mode)'
-    Write-Log "  Host: $env:COMPUTERNAME | User: $env:USERNAME | PID: $PID"
-    Write-Log '================================================================'
+    Write-UpdateLog '================================================================'
+    Write-UpdateLog '  Jellyfin Auto-Updater starting (portable ZIP mode)'
+    Write-UpdateLog "  Host: $env:COMPUTERNAME | User: $env:USERNAME | PID: $PID"
+    Write-UpdateLog '================================================================'
 
     $exitCode = [ExitCode]::Success
     $backupDir = $null
@@ -948,12 +948,12 @@ function Invoke-JellyfinUpdate {
         if ($installedVersion -and -not $Force) {
             $updateNeeded = Compare-SemanticVersion -Installed $installedVersion -Latest $release.Version
             if (-not $updateNeeded) {
-                Write-Log "Already up to date: installed=$installedVersion, latest=$($release.Version)" -Level SUCCESS
+                Write-UpdateLog "Already up to date: installed=$installedVersion, latest=$($release.Version)" -Level SUCCESS
                 return [int][ExitCode]::AlreadyUpToDate
             }
         }
 
-        Write-Log "Update available: $installedVersion -> $($release.Version)"
+        Write-UpdateLog "Update available: $installedVersion -> $($release.Version)"
 
         # -- Download --
         $download = Get-PortableZip -Release $release
@@ -966,7 +966,7 @@ function Invoke-JellyfinUpdate {
         # -- Backup --
         $backupDir = New-InstallationBackup
         if (-not $backupDir) {
-            Write-Log 'Cannot proceed without a valid backup' -Level ERROR
+            Write-UpdateLog 'Cannot proceed without a valid backup' -Level ERROR
             $exitCode = [ExitCode]::PreFlightFailed
             return [int]$exitCode
         }
@@ -982,7 +982,7 @@ function Invoke-JellyfinUpdate {
 
         # -- Extract & install --
         if (-not (Install-JellyfinUpdate -ZipPath $download.ZipPath)) {
-            Write-Log 'Installation failed, initiating rollback...' -Level ERROR
+            Write-UpdateLog 'Installation failed, initiating rollback...' -Level ERROR
             Restore-FromBackup -BackupDir $backupDir
             $exitCode = [ExitCode]::RollbackPerformed
             return [int]$exitCode
@@ -990,7 +990,7 @@ function Invoke-JellyfinUpdate {
 
         # -- Start service --
         if (-not (Start-JellyfinService)) {
-            Write-Log 'Service failed to start after update, initiating rollback...' -Level ERROR
+            Write-UpdateLog 'Service failed to start after update, initiating rollback...' -Level ERROR
             Restore-FromBackup -BackupDir $backupDir
             $exitCode = [ExitCode]::RollbackPerformed
             return [int]$exitCode
@@ -998,7 +998,7 @@ function Invoke-JellyfinUpdate {
 
         # -- Health check --
         if (-not (Test-JellyfinHealth)) {
-            Write-Log 'Health check failed after update, initiating rollback...' -Level ERROR
+            Write-UpdateLog 'Health check failed after update, initiating rollback...' -Level ERROR
             Restore-FromBackup -BackupDir $backupDir
             $exitCode = [ExitCode]::RollbackPerformed
             return [int]$exitCode
@@ -1006,7 +1006,7 @@ function Invoke-JellyfinUpdate {
 
         # -- Verify new version --
         $newVersion = Get-InstalledVersion
-        Write-Log "Update successful: $installedVersion -> $newVersion" -Level SUCCESS
+        Write-UpdateLog "Update successful: $installedVersion -> $newVersion" -Level SUCCESS
 
         Send-PushoverNotification -Type 'Success' `
             -Title "Jellyfin updated to $newVersion" `
@@ -1023,11 +1023,11 @@ function Invoke-JellyfinUpdate {
         return [int]$exitCode
     }
     catch {
-        Write-Log "UNHANDLED EXCEPTION: $_" -Level ERROR
-        Write-Log "Stack trace: $($_.ScriptStackTrace)" -Level ERROR
+        Write-UpdateLog "UNHANDLED EXCEPTION: $_" -Level ERROR
+        Write-UpdateLog "Stack trace: $($_.ScriptStackTrace)" -Level ERROR
 
         if ($backupDir -and (Test-Path $backupDir)) {
-            Write-Log 'Attempting emergency rollback...' -Level WARN
+            Write-UpdateLog 'Attempting emergency rollback...' -Level WARN
             Restore-FromBackup -BackupDir $backupDir
             $exitCode = [ExitCode]::RollbackPerformed
         }
@@ -1040,7 +1040,7 @@ function Invoke-JellyfinUpdate {
     finally {
         if ($tempDir -and (Test-Path $tempDir)) {
             Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-            Write-Log "Cleaned up temp directory: $tempDir"
+            Write-UpdateLog "Cleaned up temp directory: $tempDir"
         }
 
         Exit-UpdateLock
@@ -1066,10 +1066,10 @@ function Invoke-JellyfinUpdate {
                 )
         }
 
-        Write-Log "Exit code: $exitCode ($([int]$exitCode))"
-        Write-Log '================================================================'
-        Write-Log '  Jellyfin Auto-Updater finished'
-        Write-Log '================================================================'
+        Write-UpdateLog "Exit code: $exitCode ($([int]$exitCode))"
+        Write-UpdateLog '================================================================'
+        Write-UpdateLog '  Jellyfin Auto-Updater finished'
+        Write-UpdateLog '================================================================'
     }
 }
 
