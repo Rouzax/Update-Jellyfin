@@ -1,6 +1,10 @@
 # Plans and local docs
 docs/plans/
 
+# Claude Code
+CLAUDE.md
+.claude/
+
 # PowerShell
 *.ps1xml
 *.psm1.bak
