@@ -905,6 +905,8 @@ function Invoke-JellyfinUpdate {
     $exitCode = [ExitCode]::Success
     $backupDir = $null
     $tempDir = $null
+    $installedVersion = $null
+    $release = $null
 
     try {
         # -- Lock --
