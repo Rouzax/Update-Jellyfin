@@ -1,0 +1,39 @@
+# Plans and local docs
+docs/plans/
+
+# PowerShell
+*.ps1xml
+*.psm1.bak
+*.psd1.bak
+
+# Editor / IDE
+.vscode/
+.idea/
+*.suo
+*.user
+*.sln.docstates
+*.swp
+*~
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+._*
+
+# Windows
+$RECYCLE.BIN/
+*.lnk
+*.cab
+*.msp
+*.msm
+*.msi
+
+# Logs
+*.log
+
+# Temp files
+*.tmp
+*.bak
+*.orig
