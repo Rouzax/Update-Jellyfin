@@ -1074,5 +1074,5 @@ function Invoke-JellyfinUpdate {
 }
 
 # Execute and exit with code for Task Scheduler
-$result = Invoke-JellyfinUpdate
+$result = Invoke-JellyfinUpdate | Select-Object -Last 1
 exit $result
