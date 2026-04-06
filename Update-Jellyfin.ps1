@@ -339,7 +339,12 @@ function Test-PreFlightChecks {
 
     # 3. Disk space on system drive
     $systemDrive = $env:SystemDrive
-    $freeSpaceGB = [math]::Round((Get-PSDrive ($systemDrive.TrimEnd(':'))).Free / 1GB, 2)
+    $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='$systemDrive'" -ErrorAction SilentlyContinue
+    if (-not $disk) {
+        Write-UpdateLog "Could not query disk space for $systemDrive" -Level ERROR
+        return $false
+    }
+    $freeSpaceGB = [math]::Round($disk.FreeSpace / 1GB, 2)
     if ($freeSpaceGB -lt $Script:MinDiskSpaceGB) {
         Write-UpdateLog "Insufficient disk space on $systemDrive : ${freeSpaceGB}GB free, need ${Script:MinDiskSpaceGB}GB" -Level ERROR
         return $false
