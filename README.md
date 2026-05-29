@@ -29,6 +29,37 @@ Uses the **portable ZIP** from [repo.jellyfin.org](https://repo.jellyfin.org/) -
 
 The script will check for updates, download the latest portable ZIP, back up your current installation, apply the update, and verify Jellyfin is healthy. If anything fails, it rolls back automatically.
 
+## Configuration File
+
+Instead of passing parameters on every run, you can create a `Config\config.json` file next to the script. The script loads it automatically and uses the values as defaults. Command-line parameters always override config values.
+
+Copy the included example to get started:
+
+```powershell
+Copy-Item .\Config\config.example.json .\Config\config.json
+```
+
+Then edit `Config\config.json` with your settings:
+
+```json
+{
+    "Pushover": {
+        "UserKey": "your-pushover-user-key",
+        "ApiToken": "your-pushover-api-token",
+        "Device": "",
+        "Notifications": {
+            "Success":  { "Priority": 0,  "Sound": "none", "Ttl": 0 },
+            "Failed":   { "Priority": 1,  "Sound": "none", "Ttl": 0 },
+            "Rollback": { "Priority": 1,  "Sound": "none", "Ttl": 0 },
+            "Info":     { "Priority": -1, "Sound": "none", "Ttl": 0 }
+        }
+    },
+    "MaxBackups": 3
+}
+```
+
+Only include settings you want to change. The config file is ignored by git (via `.gitignore`) since it may contain secrets.
+
 ## Parameters
 
 | Parameter | Default | Description |

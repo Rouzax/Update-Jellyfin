@@ -1,0 +1,14 @@
+{
+    "Pushover": {
+        "UserKey": "your-pushover-user-key",
+        "ApiToken": "your-pushover-api-token",
+        "Device": "",
+        "Notifications": {
+            "Success":  { "Priority": 0,  "Sound": "none", "Ttl": 0 },
+            "Failed":   { "Priority": 1,  "Sound": "none", "Ttl": 0 },
+            "Rollback": { "Priority": 1,  "Sound": "none", "Ttl": 0 },
+            "Info":     { "Priority": -1, "Sound": "none", "Ttl": 0 }
+        }
+    },
+    "MaxBackups": 3
+}

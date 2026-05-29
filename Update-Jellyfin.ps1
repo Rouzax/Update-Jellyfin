@@ -64,6 +64,11 @@
     Forces a reinstall of the latest version with verbose output.
 
 .NOTES
+    CONFIGURATION FILE:
+    Create Config\config.json next to this script to set Pushover credentials
+    and notification preferences. Command-line parameters override config values.
+    See Config\config.example.json for the full format.
+
     SERVICE SETUP (one-time):
     This script does NOT register a Windows service -- that is your responsibility.
     If migrating from the NSIS installer, re-register the service manually:
@@ -128,6 +133,49 @@ $ErrorActionPreference = 'Stop'
 
 # Force TLS 1.2 for GitHub API and repo.jellyfin.org
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+#region -- Configuration File -------------------------------------------------
+
+$Script:Notifications = @{
+    'Success'  = @{ Priority = 0;  Sound = 'none'; Ttl = 0 }
+    'Info'     = @{ Priority = -1; Sound = 'none'; Ttl = 0 }
+    'Rollback' = @{ Priority = 1;  Sound = 'none'; Ttl = 0 }
+    'Failed'   = @{ Priority = 1;  Sound = 'none'; Ttl = 0 }
+}
+
+$Script:ConfigPath = Join-Path $PSScriptRoot (Join-Path 'Config' 'config.json')
+
+if (Test-Path $Script:ConfigPath) {
+    try {
+        $fileConfig = Get-Content $Script:ConfigPath -Raw | ConvertFrom-Json
+
+        if ($fileConfig.Pushover) {
+            if (-not $PSBoundParameters.ContainsKey('PushoverUserKey')  -and $fileConfig.Pushover.UserKey)  { $PushoverUserKey  = $fileConfig.Pushover.UserKey }
+            if (-not $PSBoundParameters.ContainsKey('PushoverApiToken') -and $fileConfig.Pushover.ApiToken) { $PushoverApiToken = $fileConfig.Pushover.ApiToken }
+            if (-not $PSBoundParameters.ContainsKey('PushoverDevice')   -and $fileConfig.Pushover.Device)   { $PushoverDevice   = $fileConfig.Pushover.Device }
+
+            if ($fileConfig.Pushover.Notifications) {
+                foreach ($type in @('Success', 'Failed', 'Rollback', 'Info')) {
+                    $notif = $fileConfig.Pushover.Notifications.$type
+                    if ($notif) {
+                        if ($null -ne $notif.Priority) { $Script:Notifications[$type].Priority = [int]$notif.Priority }
+                        if ($notif.Sound)              { $Script:Notifications[$type].Sound    = $notif.Sound }
+                        if ($null -ne $notif.Ttl)      { $Script:Notifications[$type].Ttl      = [int]$notif.Ttl }
+                    }
+                }
+            }
+        }
+
+        if (-not $PSBoundParameters.ContainsKey('MaxBackups') -and $null -ne $fileConfig.MaxBackups) {
+            $MaxBackups = [int]$fileConfig.MaxBackups
+        }
+    }
+    catch {
+        Write-Warning "Failed to load config file $($Script:ConfigPath): $_"
+    }
+}
+
+#endregion
 
 #region -- Constants ----------------------------------------------------------
 
@@ -218,21 +266,7 @@ function Send-PushoverNotification {
         return
     }
 
-    # Priority: -2 lowest, -1 low, 0 normal, 1 high, 2 emergency
-    $priorityMap = @{
-        'Success'  = 0
-        'Info'     = -1
-        'Rollback' = 1
-        'Failed'   = 1
-    }
-
-    # Sound: https://pushover.net/api#sounds
-    $soundMap = @{
-        'Success'  = 'none'
-        'Info'     = 'none'
-        'Rollback' = 'none'
-        'Failed'   = 'none'
-    }
+    $notifSettings = $Script:Notifications[$Type]
 
     $body = @{
         token    = $PushoverApiToken
@@ -240,8 +274,12 @@ function Send-PushoverNotification {
         title    = $Title
         message  = $Message
         html     = 1
-        priority = $priorityMap[$Type]
-        sound    = $soundMap[$Type]
+        priority = $notifSettings.Priority
+        sound    = $notifSettings.Sound
+    }
+
+    if ($notifSettings.Ttl -gt 0) {
+        $body['ttl'] = $notifSettings.Ttl
     }
 
     if ($PushoverDevice) {
@@ -261,7 +299,6 @@ function Send-PushoverNotification {
         Write-UpdateLog "Pushover notification sent: $Type" -Level INFO
     }
     catch {
-        # Non-fatal: log but do not fail the update
         Write-UpdateLog "Pushover notification failed: $_" -Level WARN
     }
 }

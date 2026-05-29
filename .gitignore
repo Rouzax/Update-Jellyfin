@@ -5,6 +5,9 @@ docs/plans/
 CLAUDE.md
 .claude/
 
+# Config file (may contain secrets)
+Config/config.json
+
 # PowerShell
 *.ps1xml
 *.psm1.bak
