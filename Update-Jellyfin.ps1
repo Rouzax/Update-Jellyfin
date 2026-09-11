@@ -946,32 +946,38 @@ function Test-JellyfinHealth {
 
 #region -- Compare Versions ---------------------------------------------------
 
+function ConvertTo-ComparableVersion {
+    param([string]$Raw)
+
+    # Accept 2- to 4-component versions, ignoring a 'v' prefix, a pre-release
+    # suffix (-beta.1) and build metadata (+abc). Jellyfin ships both forms:
+    # the GitHub tag can be 'v12.0' while the DLL reports '12.0.0'.
+    $match = [regex]::Match($Raw, '^v?(?<ver>\d+(\.\d+){1,3})')
+    if (-not $match.Success) { return $null }
+
+    # Pad to 4 components so 12.0, 12.0.0 and 12.0.0.0 compare as equal
+    $parts = @($match.Groups['ver'].Value -split '\.')
+    while ($parts.Count -lt 4) { $parts += '0' }
+
+    try { return [version]($parts -join '.') }
+    catch { return $null }
+}
+
 function Compare-SemanticVersion {
     param(
         [string]$Installed,
         [string]$Latest
     )
 
-    # Strip v prefix, pre-release suffix (-beta.1), and build metadata (+abc)
-    $cleanPattern = '^v?(?<ver>\d+\.\d+\.\d+(\.\d+)?)'
+    $instVer   = ConvertTo-ComparableVersion -Raw $Installed
+    $latestVer = ConvertTo-ComparableVersion -Raw $Latest
 
-    $instMatch   = [regex]::Match($Installed, $cleanPattern)
-    $latestMatch = [regex]::Match($Latest, $cleanPattern)
-
-    if (-not $instMatch.Success -or -not $latestMatch.Success) {
+    if (-not $instVer -or -not $latestVer) {
         Write-UpdateLog "Could not parse version numbers, falling back to string comparison (installed='$Installed', latest='$Latest')" -Level WARN
         return $Installed -ne $Latest
     }
 
-    try {
-        $instVer   = [version]$instMatch.Groups['ver'].Value
-        $latestVer = [version]$latestMatch.Groups['ver'].Value
-        return $latestVer -gt $instVer
-    }
-    catch {
-        Write-UpdateLog "Version cast failed: $_ - falling back to string comparison" -Level WARN
-        return $Installed -ne $Latest
-    }
+    return $latestVer -gt $instVer
 }
 
 #endregion
